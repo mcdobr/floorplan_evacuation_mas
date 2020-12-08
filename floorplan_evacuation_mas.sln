@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30523.141
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "floorplan_evacuation_mas", "floorplan_evacuation_mas\floorplan_evacuation_mas.csproj", "{1648388B-63DE-4E99-9C47-808975A69533}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1648388B-63DE-4E99-9C47-808975A69533}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1648388B-63DE-4E99-9C47-808975A69533}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1648388B-63DE-4E99-9C47-808975A69533}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1648388B-63DE-4E99-9C47-808975A69533}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {83384211-AB58-44B1-8A75-87F2DCA00BCE}
+	EndGlobalSection
+EndGlobal
