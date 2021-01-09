@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using ActressMas;
+using Reactive;
 
 
 /**
@@ -42,9 +44,22 @@ namespace floorplan_evacuation_mas
         [STAThread]
         static void Main()
         {
+            TurnBasedEnvironment env = new TurnBasedEnvironment(0, 100);
+
+            var monitorAgent = new MonitorAgent();
+            env.Add(monitorAgent, "planet");
+
+            for (int i = 1; i <= Utils.NoExplorers; i++)
+            {
+                var explorerAgent = new WorkerAgent();
+                env.Add(explorerAgent, "explorer" + i);
+            }
+
+            env.Start();
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Form1());
+            Application.Run(new FloorPlanForm());
         }
     }
 }
