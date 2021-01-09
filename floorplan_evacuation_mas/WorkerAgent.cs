@@ -15,6 +15,7 @@ namespace floorplan_evacuation_mas
         private int x;
         private int y;
         private State state;
+        private Direction direction;
 
         public WorkerAgent(int id, int x, int y)
         {
@@ -60,29 +61,75 @@ namespace floorplan_evacuation_mas
                         if (state == State.MovingRandomly)
                         {
                             MoveRandomly();
-                            
                         }
                         else
                         {
-                            //MoveInDirection();
+                            MoveInDirection();
                         }
+
                         Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
                         break;
+                    case MessageType.Emergency:
+                        state = State.MovingInConstantDirection;
+                        break;
                 }
+            }
+        }
 
+        private void MoveInDirection()
+        {
+            while (!canMoveInDirection())
+            {
+                this.direction = GenerateDirection();
+            }
+            executeMoveInDirection();
+        }
+
+        private bool canMoveInDirection()
+        {
+            switch (this.direction)
+            {
+                case Direction.Up:
+                    return (X > 0);
+                case Direction.Down:
+                    return (X < Utils.Size - 1);
+                case Direction.Left:
+                    return (Y > 0);
+                case Direction.Right:
+                    return (Y < Utils.Size - 1);
+                default:
+                    throw new NotImplementedException();
             }
         }
 
         private void MoveRandomly()
         {
-            int d = Utils.RandNoGen.Next(4);
-            switch (d)
+            this.direction = GenerateDirection();
+            executeMoveInDirection();
+        }
+
+        private void executeMoveInDirection()
+        {
+            switch (this.direction)
             {
-                case 0: if (X > 0) X--; break;
-                case 1: if (X < Utils.Size - 1) X++; break;
-                case 2: if (Y > 0) Y--; break;
-                case 3: if (Y < Utils.Size - 1) Y++; break;
+                case Direction.Up:
+                    if (X > 0) X--;
+                    break;
+                case Direction.Down:
+                    if (X < Utils.Size - 1) X++;
+                    break;
+                case Direction.Left:
+                    if (Y > 0) Y--;
+                    break;
+                case Direction.Right:
+                    if (Y < Utils.Size - 1) Y++;
+                    break;
             }
+        }
+
+        private static Direction GenerateDirection()
+        {
+            return (Direction) Utils.RandNoGen.Next(4);
         }
 
         public enum State
@@ -90,5 +137,13 @@ namespace floorplan_evacuation_mas
             MovingRandomly,
             MovingInConstantDirection
         };
+
+        public enum Direction
+        {
+            Up = 0,
+            Down = 1,
+            Left = 2,
+            Right = 3
+        }
     }
 }

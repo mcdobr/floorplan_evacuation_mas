@@ -17,15 +17,24 @@ namespace floorplan_evacuation_mas
         public static String Monitor = "monitor";
 
         private FloorPlanForm guiForm;
+        
+        private int turnsUntilEmergency;
+
+        private Dictionary<int, int> numberOfPositionChanges;
         public Dictionary<int, Tuple<int, int>> WorkerPositions { get; set; }
         public Dictionary<int, Tuple<int, int>> ExitPositions { get; set; }
 
 
-        public MonitorAgent(Dictionary<int, Tuple<int, int>> workerPositions,
-            Dictionary<int, Tuple<int, int>> exitPositions)
+        public MonitorAgent(
+            int turnsUntilEmergency, 
+            Dictionary<int, Tuple<int, int>> workerPositions,
+            Dictionary<int, Tuple<int, int>> exitPositions
+            )
         {
+            this.turnsUntilEmergency = turnsUntilEmergency;
             this.WorkerPositions = workerPositions;
             this.ExitPositions = exitPositions;
+            this.numberOfPositionChanges = new Dictionary<int, int>();
 
             Thread guiThread = new Thread(new ThreadStart(StartGuiThread));
             guiThread.Start();
@@ -75,12 +84,18 @@ namespace floorplan_evacuation_mas
         {
             int senderId = ParsePeer(sender);
             WorkerPositions.Add(senderId, ParsePosition(position));
+            numberOfPositionChanges[senderId] = 0;
             Send(sender, MessageType.Move);
         }
         private void HandleChangePosition(string sender, string parameters)
         {
             int senderId = ParsePeer(sender);
             WorkerPositions[senderId] = ParsePosition(parameters);
+            if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
+            {
+                Send(sender, MessageType.Emergency);
+            }
+
             Send(sender, MessageType.Move);
         }
 

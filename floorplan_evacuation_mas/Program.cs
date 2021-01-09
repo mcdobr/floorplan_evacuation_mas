@@ -59,7 +59,8 @@ namespace floorplan_evacuation_mas
             exitPositions.Add(0, new Tuple<int, int>(4, 5));
             exitPositions.Add(1, new Tuple<int, int>(8, 9));
 
-            var monitorAgent = new MonitorAgent(new Dictionary<int, Tuple<int, int>>(), exitPositions);
+            int turnsUntilEmergency = 5;
+            var monitorAgent = new MonitorAgent(turnsUntilEmergency, new Dictionary<int, Tuple<int, int>>(), exitPositions);
             env.Add(monitorAgent, MonitorAgent.Monitor);
             workers.ForEach(worker => env.Add(worker, getWorkerName(worker)));
 
