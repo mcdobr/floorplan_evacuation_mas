@@ -17,10 +17,10 @@ namespace floorplan_evacuation_mas
         public Dictionary<int, Tuple<int, int>> ExitPositions { get; set; }
 
 
-        public MonitorAgent()
+        public MonitorAgent(Dictionary<int, Tuple<int, int>> workerPositions, Dictionary<int, Tuple<int, int>> exitPositions)
         {
-            WorkerPositions = new Dictionary<int, Tuple<int, int>>();
-            ExitPositions = new Dictionary<int, Tuple<int, int>>();
+            this.WorkerPositions = workerPositions;
+            this.ExitPositions = exitPositions;
 
             Thread guiThread = new Thread(new ThreadStart(StartGuiThread));
             guiThread.Start();

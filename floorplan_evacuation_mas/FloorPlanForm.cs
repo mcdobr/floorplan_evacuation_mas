@@ -59,27 +59,26 @@ namespace Reactive
                 g.DrawLine(Pens.DarkGray, 20 + i * cellSize, 20, 20 + i * cellSize, 20 + Utils.Size * cellSize);
             }
 
-            g.FillEllipse(Brushes.Red, 20 + Utils.Size / 2 * cellSize + 4, 20 + Utils.Size / 2 * cellSize + 4, cellSize - 8, cellSize - 8); // the base
-
             if (ownerAgent != null)
             {
-                foreach (Tuple<int, int> position in ownerAgent.WorkerPositions.Values)
+                foreach (Tuple<int, int> workerPosition in ownerAgent.WorkerPositions.Values)
                 {
-                    // string[] t = v.Split();
-                    // int x = Convert.ToInt32(t[0]);
-                    // int y = Convert.ToInt32(t[1]);
-
-                    // g.FillEllipse(Brushes.Blue, 20 + x * cellSize + 6, 20 + y * cellSize + 6, cellSize - 12, cellSize - 12);
+                    g.FillEllipse(Brushes.Blue,
+                        20 + workerPosition.Item1 * cellSize + 6,
+                        20 + workerPosition.Item2 * cellSize + 6,
+                        cellSize - 12,
+                        cellSize - 12
+                    );
                 }
 
-                // todo : maybe don't do this
-                foreach (Tuple<int, int> position in ownerAgent.ExitPositions.Values)
+                foreach (Tuple<int, int> exitPosition in ownerAgent.ExitPositions.Values)
                 {
-                    // string[] t = v.Split();
-                    // int x = Convert.ToInt32(t[0]);
-                    // int y = Convert.ToInt32(t[1]);
-
-                    // g.FillRectangle(Brushes.LightGreen, 20 + x * cellSize + 10, 20 + y * cellSize + 10, cellSize - 20, cellSize - 20);
+                    g.FillRectangle(Brushes.LightGreen,
+                        20 + exitPosition.Item1 * cellSize + 10,
+                        20 + exitPosition.Item2 * cellSize + 10,
+                        cellSize - 20,
+                        cellSize - 20
+                    );
                 }
             }
 

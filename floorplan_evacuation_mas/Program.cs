@@ -46,7 +46,13 @@ namespace floorplan_evacuation_mas
         {
             TurnBasedEnvironment env = new TurnBasedEnvironment(0, 100);
 
-            var monitorAgent = new MonitorAgent();
+
+            var workerPositions = new Dictionary<int, Tuple<int, int>>();
+            var exitPositions = new Dictionary<int, Tuple<int, int>>();
+            exitPositions.Add(0, new Tuple<int, int>(2, 3));
+            exitPositions.Add(1, new Tuple<int, int>(8, 9));
+
+            var monitorAgent = new MonitorAgent(workerPositions, exitPositions);
             env.Add(monitorAgent, "planet");
 
             for (int i = 1; i <= Utils.NoExplorers; i++)
