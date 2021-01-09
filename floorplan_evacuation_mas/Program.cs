@@ -47,19 +47,25 @@ namespace floorplan_evacuation_mas
             TurnBasedEnvironment env = new TurnBasedEnvironment(0, 100);
 
 
-            var workerPositions = new Dictionary<int, Tuple<int, int>>();
+            List<WorkerAgent> workers = new List<WorkerAgent>();
+            workers.Add(new WorkerAgent(0, 1, 3));
+            workers.Add(new WorkerAgent(1, 7, 2));
+            workers.Add(new WorkerAgent(2, 3, 2));
+            workers.Add(new WorkerAgent(3, 9, 0));
+
+
+            var workerPositions = workers.ToDictionary(
+                workerAgent => workerAgent.Id,
+                workerAgent => new Tuple<int, int>(workerAgent.X, workerAgent.Y)
+            );
             var exitPositions = new Dictionary<int, Tuple<int, int>>();
-            exitPositions.Add(0, new Tuple<int, int>(2, 3));
+
+            exitPositions.Add(0, new Tuple<int, int>(4, 5));
             exitPositions.Add(1, new Tuple<int, int>(8, 9));
 
             var monitorAgent = new MonitorAgent(workerPositions, exitPositions);
             env.Add(monitorAgent, "planet");
-
-            for (int i = 1; i <= Utils.NoExplorers; i++)
-            {
-                var explorerAgent = new WorkerAgent();
-                env.Add(explorerAgent, "explorer" + i);
-            }
+            workers.ForEach(worker => env.Add(worker, "Worker " + worker.Id));
 
             env.Start();
 
