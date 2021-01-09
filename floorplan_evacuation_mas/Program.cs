@@ -54,24 +54,25 @@ namespace floorplan_evacuation_mas
             workers.Add(new WorkerAgent(3, 9, 0));
 
 
-            var workerPositions = workers.ToDictionary(
-                workerAgent => workerAgent.Id,
-                workerAgent => new Tuple<int, int>(workerAgent.X, workerAgent.Y)
-            );
             var exitPositions = new Dictionary<int, Tuple<int, int>>();
 
             exitPositions.Add(0, new Tuple<int, int>(4, 5));
             exitPositions.Add(1, new Tuple<int, int>(8, 9));
 
-            var monitorAgent = new MonitorAgent(workerPositions, exitPositions);
-            env.Add(monitorAgent, "planet");
-            workers.ForEach(worker => env.Add(worker, "Worker " + worker.Id));
+            var monitorAgent = new MonitorAgent(new Dictionary<int, Tuple<int, int>>(), exitPositions);
+            env.Add(monitorAgent, MonitorAgent.Monitor);
+            workers.ForEach(worker => env.Add(worker, getWorkerName(worker)));
 
             env.Start();
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new FloorPlanForm());
+        }
+
+        public static string getWorkerName(WorkerAgent worker)
+        {
+            return "Worker " + worker.Id;
         }
     }
 }
