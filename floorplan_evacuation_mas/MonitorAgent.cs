@@ -15,9 +15,11 @@ namespace floorplan_evacuation_mas
     public class MonitorAgent : TurnBasedAgent
     {
         public static String Monitor = "monitor";
+        public static int FieldOfViewSide = 5;
+        public static int FieldOfViewRadius = FieldOfViewSide / 2;
 
         private FloorPlanForm guiForm;
-        
+
         private int turnsUntilEmergency;
 
         private Dictionary<int, int> numberOfPositionChanges;
@@ -26,10 +28,10 @@ namespace floorplan_evacuation_mas
 
 
         public MonitorAgent(
-            int turnsUntilEmergency, 
+            int turnsUntilEmergency,
             Dictionary<int, Tuple<int, int>> workerPositions,
             Dictionary<int, Tuple<int, int>> exitPositions
-            )
+        )
         {
             this.turnsUntilEmergency = turnsUntilEmergency;
             this.WorkerPositions = workerPositions;
@@ -82,33 +84,68 @@ namespace floorplan_evacuation_mas
 
         private void HandlePosition(string sender, string position)
         {
-            int senderId = ParsePeer(sender);
-            WorkerPositions.Add(senderId, ParsePosition(position));
+            int senderId = Utils.ParsePeer(sender);
+            WorkerPositions.Add(senderId, Utils.ParsePosition(position));
             numberOfPositionChanges[senderId] = 0;
             Send(sender, MessageType.Move);
         }
+
         private void HandleChangePosition(string sender, string parameters)
         {
-            int senderId = ParsePeer(sender);
-            WorkerPositions[senderId] = ParsePosition(parameters);
+            int senderId = Utils.ParsePeer(sender);
+            WorkerPositions[senderId] = Utils.ParsePosition(parameters);
             if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
             {
                 Send(sender, MessageType.Emergency);
+                return;
             }
 
-            Send(sender, MessageType.Move);
+            foreach (int workerId in WorkerPositions.Keys)
+            {
+                if (workerId == senderId)
+                    continue;
+                if (WorkerPositions[workerId].Equals(WorkerPositions[senderId]))
+                {
+                    Send(sender, MessageType.Block);
+                    return;
+                }
+            }
+
+            var closestExit = ExitPositions.Select(kvp =>
+                    new KeyValuePair<Tuple<int, int>, int>(kvp.Value,
+                        Utils.Distance(kvp.Value, WorkerPositions[senderId])))
+                .Where(kvp => ExitInFieldOfView(kvp.Key, WorkerPositions[senderId]))
+                .OrderBy(kvp => kvp.Value)
+                .FirstOrDefault();
+
+            if (closestExit.Equals(default(KeyValuePair<Tuple<int, int>, int>)) ||
+                numberOfPositionChanges[senderId] < turnsUntilEmergency)
+            {
+                Send(sender, MessageType.Move);
+            }
+            else
+            {
+                if (closestExit.Value == 0)
+                {
+                    Send(sender, Utils.Str(MessageType.Exit, (closestExit)));
+                    WorkerPositions.Remove(senderId);
+                    this.Environment.Remove(sender);
+                    if (WorkerPositions.Count == 0)
+                    {
+                        this.Stop();
+                    }
+                }
+                else
+                {
+                    Send(sender, Utils.Str(MessageType.ExitNearby, closestExit.Key.Item1, closestExit.Key.Item2));
+                }
+            }
         }
 
-        private int ParsePeer(string sender)
+        private bool ExitInFieldOfView(Tuple<int, int> exitPosition, Tuple<int, int> workerPosition)
         {
-            return int.Parse(sender.Replace("Worker ", string.Empty));
-        }
-
-        private Tuple<int, int> ParsePosition(string positionStr)
-        {
-            var positionList = positionStr.Split(' ').Select(numberStr => int.Parse(numberStr)).ToList();
-            var position = new Tuple<int, int>(positionList[0], positionList[1]);
-            return position;
+            return Math.Abs(exitPosition.Item1 - workerPosition.Item1) <= FieldOfViewRadius &&
+                   Math.Abs(exitPosition.Item2 - workerPosition.Item2) <= FieldOfViewRadius;
         }
     }
 }

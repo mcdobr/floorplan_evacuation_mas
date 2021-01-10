@@ -52,7 +52,7 @@ namespace floorplan_evacuation_mas
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
                 string action;
-                List<string> parameters;
+                string parameters;
                 Utils.ParseMessage(message.Content, out action, out parameters);
 
                 switch (action)
@@ -71,23 +71,72 @@ namespace floorplan_evacuation_mas
                         break;
                     case MessageType.Emergency:
                         state = State.MovingInConstantDirection;
+                        MoveInDirection();
+                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
                         break;
+                    case MessageType.Block:
+                        // todo: could exclude blocked old dir
+                        if (state == State.MovingRandomly)
+                        {
+                            MoveRandomly();
+                        }
+                        else
+                        {
+                            MoveInOtherDirection();
+                        }
+                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+                        break;
+                    case MessageType.ExitNearby:
+                        state = State.MovingTowardsExit;
+                        var exitPosition = Utils.ParsePosition(parameters);
+                        (this.X, this.Y) = MoveNear(exitPosition);
+                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+                        break;
+                    case Exit:
+                        break;
+                    default:
+                        throw new NotImplementedException();
                 }
             }
         }
 
+        private Tuple<int, int> MoveNear(Tuple<int, int> exitPosition)
+        {
+            var closestPositionToExit = new List<Direction>
+                    {Direction.Up, Direction.Down, Direction.Left, Direction.Right}
+                .Select(dir => GetAdjacent(dir))
+                .Where(adjacentPosition => IsInBounds(adjacentPosition))
+                .Select(position =>
+                    new KeyValuePair<Tuple<int, int>, int>(position, Utils.Distance(exitPosition, position)))
+                .OrderBy(kvp => kvp.Value)
+                .First().Key;
+
+            return closestPositionToExit;
+        }
+
+        private void MoveInOtherDirection()
+        {
+            this.direction = GenerateDirection();
+            MoveInDirection();
+        }
+
         private void MoveInDirection()
         {
-            while (!canMoveInDirection())
+            while (!CanMoveWithinBounds())
             {
                 this.direction = GenerateDirection();
             }
             executeMoveInDirection();
         }
 
-        private bool canMoveInDirection()
+        private bool CanMoveWithinBounds()
         {
-            switch (this.direction)
+            return CanMoveWithinBounds(this.direction);
+        }
+
+        private bool CanMoveWithinBounds(Direction dir)
+        {
+            switch (dir)
             {
                 case Direction.Up:
                     return (X > 0);
@@ -97,6 +146,28 @@ namespace floorplan_evacuation_mas
                     return (Y > 0);
                 case Direction.Right:
                     return (Y < Utils.Size - 1);
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        private bool IsInBounds(Tuple<int, int> position)
+        {
+            return X >= 0 && X < Utils.Size && Y >= 0 && Y < Utils.Size;
+        }
+
+        private Tuple<int, int> GetAdjacent(Direction dir)
+        {
+            switch (dir)
+            {
+                case Direction.Up:
+                    return new Tuple<int,int>(X-1, Y);
+                case Direction.Down:
+                    return new Tuple<int, int>(X+1, Y);
+                case Direction.Left:
+                    return new Tuple<int, int>(X, Y-1);
+                case Direction.Right:
+                    return new Tuple<int, int>(X, Y+1);
                 default:
                     throw new NotImplementedException();
             }
@@ -135,9 +206,11 @@ namespace floorplan_evacuation_mas
         public enum State
         {
             MovingRandomly,
-            MovingInConstantDirection
+            MovingInConstantDirection,
+            MovingTowardsExit
         };
 
+        //todo: The labels are wrong because x is the column and y is the line (start from top left corner)
         public enum Direction
         {
             Up = 0,

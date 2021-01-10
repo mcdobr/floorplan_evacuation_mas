@@ -12,5 +12,8 @@ namespace floorplan_evacuation_mas
         public const string Move = "move";
         public const string ChangePosition = "change";
         public const string Emergency = "emergency";
+        public const string Block = "block";
+        public const string ExitNearby = "exitNearby";
+        public const string Exit = "exit";
     }
 }

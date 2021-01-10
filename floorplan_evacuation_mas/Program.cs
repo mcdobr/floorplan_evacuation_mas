@@ -44,7 +44,7 @@ namespace floorplan_evacuation_mas
         [STAThread]
         static void Main()
         {
-            TurnBasedEnvironment env = new TurnBasedEnvironment(0, 100);
+            TurnBasedEnvironment env = new FloorPlanEnvironment(0, 100);
 
 
             List<WorkerAgent> workers = new List<WorkerAgent>();
@@ -66,9 +66,9 @@ namespace floorplan_evacuation_mas
 
             env.Start();
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new FloorPlanForm());
+            // Application.EnableVisualStyles();
+            // Application.SetCompatibleTextRenderingDefault(false);
+            // Application.Run(new FloorPlanForm());
         }
 
         public static string getWorkerName(WorkerAgent worker)

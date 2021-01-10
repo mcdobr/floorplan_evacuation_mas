@@ -51,5 +51,23 @@ namespace floorplan_evacuation_mas
         {
             return string.Format("{0} {1} {2}", p1, p2, p3);
         }
+
+        public static int ParsePeer(string sender)
+        {
+            return int.Parse(sender.Replace("Worker ", string.Empty));
+        }
+
+        public static Tuple<int, int> ParsePosition(string positionStr)
+        {
+            var positionList = positionStr.Split(' ').Select(numberStr => int.Parse(numberStr)).ToList();
+            var position = new Tuple<int, int>(positionList[0], positionList[1]);
+            return position;
+        }
+
+        public static int Distance(Tuple<int, int> exitPosition, Tuple<int, int> workerPosition)
+        {
+            return Math.Abs(exitPosition.Item1 - workerPosition.Item1) +
+                   Math.Abs(exitPosition.Item2 - workerPosition.Item2);
+        }
     }
 }
