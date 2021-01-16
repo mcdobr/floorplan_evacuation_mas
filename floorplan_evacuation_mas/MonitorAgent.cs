@@ -71,7 +71,7 @@ namespace floorplan_evacuation_mas
                     case Start:
                         HandleStart(message.Sender, floorPlanMessage);
                         break;
-                    case ChangePosition:
+                    case MessageType.Move:
                         HandleChangePosition(message.Sender, floorPlanMessage);
                         break;
                     default:
@@ -82,40 +82,41 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        private void HandleStart(string sender, FloorPlanMessage floorPlanMessage)
+        private void HandleStart(string sender, FloorPlanMessage startMessage)
         {
             int senderId = Utils.ParsePeer(sender);
-            WorkerPositions.Add(senderId, floorPlanMessage.position);
+            WorkerPositions.Add(senderId, startMessage.position);
             numberOfPositionChanges[senderId] = 0;
 
-            FloorPlanMessage planMessage = new FloorPlanMessage();
-            planMessage.type = MessageType.Move;
-            Send(sender, JsonSerializer.Serialize(planMessage));
+            FloorPlanMessage ackMessage = BuildFloorPlanMessage(MessageType.Acknowledge, WorkerPositions[senderId]);
+            Send(sender, JsonSerializer.Serialize(ackMessage));
         }
 
-        private void HandleChangePosition(string sender, FloorPlanMessage floorPlanMessage)
+        private void HandleChangePosition(string sender, FloorPlanMessage receivedMessage)
         {
             int senderId = Utils.ParsePeer(sender);
-            // todo: change position only if there is nobody there already
-            WorkerPositions[senderId] = floorPlanMessage.position;
-            if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
-            {
-                var emergencyMessage = BuildFloorPlanMessage(MessageType.Emergency, WorkerPositions[senderId]);
-                Send(sender, JsonSerializer.Serialize(emergencyMessage));
-                return;
-            }
-
             // Block is handled regardless if in emergency or not
             foreach (int workerId in WorkerPositions.Keys)
             {
                 if (workerId == senderId)
                     continue;
-                if (WorkerPositions[workerId].Equals(WorkerPositions[senderId]))
+                if (WorkerPositions[workerId].Equals(receivedMessage.position))
                 {
                     var blockMessage = BuildFloorPlanMessage(MessageType.Block, WorkerPositions[senderId]);
                     Send(sender, JsonSerializer.Serialize(blockMessage));
                     return;
                 }
+            }
+
+            // Allow the requested move
+            WorkerPositions[senderId] = receivedMessage.position;
+            
+            // Should declare emergency
+            if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
+            {
+                var emergencyMessage = BuildFloorPlanMessage(MessageType.Emergency, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(emergencyMessage));
+                return;
             }
 
             // Exit if emergency is declared 
@@ -134,7 +135,7 @@ namespace floorplan_evacuation_mas
             }
 
             // Only thing remaining to do is acknowledge the move
-            var moveMessage = BuildFloorPlanMessage(MessageType.Move, WorkerPositions[senderId]);
+            var moveMessage = BuildFloorPlanMessage(MessageType.Acknowledge, WorkerPositions[senderId]);
             Send(sender, JsonSerializer.Serialize(moveMessage));
         }
 

@@ -35,6 +35,11 @@ namespace floorplan_evacuation_mas
             }
         }
 
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
         public override string ToString()
         {
             return $"Point({X}, {Y})";

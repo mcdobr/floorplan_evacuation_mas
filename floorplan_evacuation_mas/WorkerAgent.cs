@@ -13,32 +13,19 @@ namespace floorplan_evacuation_mas
     class WorkerAgent : TurnBasedAgent
     {
         private int id;
-        private int x;
-        private int y;
+        private Point position;
         private State state;
         private Direction direction;
 
         public WorkerAgent(int id, int x, int y)
         {
             this.id = id;
-            this.x = x;
-            this.y = y;
+            this.position = new Point(x, y);
             this.state = State.MovingRandomly;
         }
 
         public int Id => id;
 
-        public int X
-        {
-            get => x;
-            set => x = value;
-        }
-
-        public int Y
-        {
-            get => y;
-            set => y = value;
-        }
 
         public override void Setup()
         {
@@ -46,7 +33,7 @@ namespace floorplan_evacuation_mas
 
             FloorPlanMessage positionMessage = new FloorPlanMessage();
             positionMessage.type = MessageType.Start;
-            positionMessage.position = new Point(X, Y);
+            positionMessage.position = this.position;
             Send(MonitorAgent.Monitor, JsonSerializer.Serialize(positionMessage));
         }
 
@@ -58,61 +45,62 @@ namespace floorplan_evacuation_mas
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
                 FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
+                this.position = receivedMessage.position;
                 switch (receivedMessage.type)
                 {
-                    case MessageType.Move:
+                    case MessageType.Acknowledge:
                     {
+                        Point candidate = null;
                         if (state == State.MovingRandomly)
                         {
-                            MoveRandomly();
+                            candidate = MoveRandomly();
                         }
                         else
                         {
                             if (receivedMessage.exitsInFieldOfViewPositions.Count == 0)
                             {
-                                MoveInDirection();
+                                candidate = MoveInDirection();
                             }
                             else
                             {
-                                Point candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
-                                    new Point(X, Y)));
-                                X = candidate.X;
-                                Y = candidate.Y;
+                                candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                                    this.position));
                             }
                         }
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.ChangePosition;
-                        changePositionMessage.position = new Point(X, Y);
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
                     case MessageType.Emergency:
                     {
                         state = State.MovingInConstantDirection;
-                        MoveInDirection();
+                        var candidate = MoveInDirection();
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.ChangePosition;
-                        changePositionMessage.position = new Point(X, Y);
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
                     case MessageType.Block:
                     {
                         // todo: could exclude blocked old dir
+                        Point candidate = null;
                         if (state == State.MovingRandomly)
                         {
-                            MoveRandomly();
+                            candidate = MoveRandomly();
                         }
                         else
                         {
-                            MoveInOtherDirection();
+                            candidate = MoveInOtherDirection();
                         }
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.ChangePosition;
-                        changePositionMessage.position = new Point(X, Y);
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
@@ -140,20 +128,32 @@ namespace floorplan_evacuation_mas
             return closestPositionToExit;
         }
 
-        private void MoveInOtherDirection()
+        private Point MoveInOtherDirection()
         {
             this.direction = GenerateDirection();
-            MoveInDirection();
+            return MoveInDirection();
         }
 
-        private void MoveInDirection()
+        private Point MoveInDirection()
         {
             while (!CanMoveWithinBounds())
             {
                 this.direction = GenerateDirection();
             }
 
-            executeMoveInDirection();
+            switch (this.direction)
+            {
+                case Direction.Up:
+                    return new Point(this.position.X - 1, this.position.Y);
+                case Direction.Down:
+                    return new Point(this.position.X + 1, this.position.Y);
+                case Direction.Left:
+                    return new Point(this.position.X, this.position.Y - 1);
+                case Direction.Right:
+                    return new Point(this.position.X, this.position.Y + 1);
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         private bool CanMoveWithinBounds()
@@ -166,13 +166,13 @@ namespace floorplan_evacuation_mas
             switch (dir)
             {
                 case Direction.Up:
-                    return (X > 0);
+                    return (this.position.X > 0);
                 case Direction.Down:
-                    return (X < Utils.Size - 1);
+                    return (this.position.X < Utils.Size - 1);
                 case Direction.Left:
-                    return (Y > 0);
+                    return (this.position.Y > 0);
                 case Direction.Right:
-                    return (Y < Utils.Size - 1);
+                    return (this.position.Y < Utils.Size - 1);
                 default:
                     throw new NotImplementedException();
             }
@@ -181,7 +181,8 @@ namespace floorplan_evacuation_mas
         // todo: wtf does this do?
         private bool IsInBounds(Point position)
         {
-            return X >= 0 && X < Utils.Size && Y >= 0 && Y < Utils.Size;
+            return this.position.X >= 0 && this.position.X < Utils.Size && this.position.Y >= 0 &&
+                   this.position.Y < Utils.Size;
         }
 
         private Point GetAdjacent(Direction dir)
@@ -189,41 +190,46 @@ namespace floorplan_evacuation_mas
             switch (dir)
             {
                 case Direction.Up:
-                    return new Point(X - 1, Y);
+                    return new Point(this.position.X - 1, this.position.Y);
                 case Direction.Down:
-                    return new Point(X + 1, Y);
+                    return new Point(this.position.X + 1, this.position.Y);
                 case Direction.Left:
-                    return new Point(X, Y - 1);
+                    return new Point(this.position.X, this.position.Y - 1);
                 case Direction.Right:
-                    return new Point(X, Y + 1);
+                    return new Point(this.position.X, this.position.Y + 1);
                 default:
                     throw new NotImplementedException();
             }
         }
 
-        private void MoveRandomly()
+        private Point MoveRandomly()
         {
-            this.direction = GenerateDirection();
-            executeMoveInDirection();
-        }
-
-        private void executeMoveInDirection()
-        {
-            switch (this.direction)
+            Point result = null;
+            do
             {
-                case Direction.Up:
-                    if (X > 0) X--;
-                    break;
-                case Direction.Down:
-                    if (X < Utils.Size - 1) X++;
-                    break;
-                case Direction.Left:
-                    if (Y > 0) Y--;
-                    break;
-                case Direction.Right:
-                    if (Y < Utils.Size - 1) Y++;
-                    break;
-            }
+                this.direction = GenerateDirection();
+                switch (this.direction)
+                {
+                    case Direction.Up:
+                        if (this.position.X > 0)
+                            result = new Point(this.position.X - 1, this.position.Y);
+                        break;
+                    case Direction.Down:
+                        if (this.position.X < Utils.Size - 1)
+                            result = new Point(this.position.X + 1, this.position.Y);
+                        break;
+                    case Direction.Left:
+                        if (this.position.Y > 0)
+                            result = new Point(this.position.X, this.position.Y - 1);
+                        break;
+                    case Direction.Right:
+                        if (this.position.Y < Utils.Size - 1)
+                            result = new Point(this.position.X, this.position.Y + 1);
+                        break;
+                }
+            } while (result == null);
+
+            return result;
         }
 
         private static Direction GenerateDirection()

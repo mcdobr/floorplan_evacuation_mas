@@ -52,7 +52,7 @@ namespace floorplan_evacuation_mas
             workers.Add(new WorkerAgent(1, 7, 2));
             workers.Add(new WorkerAgent(2, 3, 2));
             workers.Add(new WorkerAgent(3, 9, 0));
-            // workers.Add(new WorkerAgent(4, 8, 9));
+            workers.Add(new WorkerAgent(4, 1, 9));
             // workers.Add(new WorkerAgent(5, 10, 9));
 
 
