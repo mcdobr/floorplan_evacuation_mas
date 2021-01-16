@@ -57,6 +57,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="FloorPlanForm.Designer.cs" />
+    <Compile Include="FloorPlanMessage.cs" />
     <Compile Include="MessageType.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="MonitorAgent.cs" />
