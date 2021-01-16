@@ -8,7 +8,7 @@ namespace floorplan_evacuation_mas
 {
     public class MessageType
     {
-        public const string Position = "position";
+        public const string Start = "start";
         public const string Move = "move";
         public const string ChangePosition = "change";
         public const string Emergency = "emergency";

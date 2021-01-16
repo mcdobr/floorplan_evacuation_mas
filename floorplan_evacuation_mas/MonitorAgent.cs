@@ -64,17 +64,12 @@ namespace floorplan_evacuation_mas
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
-
                 FloorPlanMessage floorPlanMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
-
-                // string action;
-                // string parameters;
-                // Utils.ParseMessage(message.Content, out action, out parameters);
 
                 switch (floorPlanMessage.type)
                 {
-                    case Position:
-                        HandlePosition(message.Sender, floorPlanMessage);
+                    case Start:
+                        HandleStart(message.Sender, floorPlanMessage);
                         break;
                     case ChangePosition:
                         HandleChangePosition(message.Sender, floorPlanMessage);
@@ -87,7 +82,7 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        private void HandlePosition(string sender, FloorPlanMessage floorPlanMessage)
+        private void HandleStart(string sender, FloorPlanMessage floorPlanMessage)
         {
             int senderId = Utils.ParsePeer(sender);
             WorkerPositions.Add(senderId, floorPlanMessage.position);

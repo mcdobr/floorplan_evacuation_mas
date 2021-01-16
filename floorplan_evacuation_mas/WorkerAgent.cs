@@ -45,7 +45,7 @@ namespace floorplan_evacuation_mas
             Console.WriteLine("Starting worker " + Id);
 
             FloorPlanMessage positionMessage = new FloorPlanMessage();
-            positionMessage.type = MessageType.Position;
+            positionMessage.type = MessageType.Start;
             positionMessage.position = new Point(X, Y);
             Send(MonitorAgent.Monitor, JsonSerializer.Serialize(positionMessage));
         }
@@ -56,12 +56,8 @@ namespace floorplan_evacuation_mas
             {
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
-                // string action;
-                // string parameters;
-                // Utils.ParseMessage(message.Content, out action, out parameters);
 
                 FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
-
                 switch (receivedMessage.type)
                 {
                     case MessageType.Move:
