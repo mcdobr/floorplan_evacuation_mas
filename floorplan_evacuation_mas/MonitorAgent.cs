@@ -105,6 +105,7 @@ namespace floorplan_evacuation_mas
                 return;
             }
 
+            // Block is handled regardless if in emergency or not
             foreach (int workerId in WorkerPositions.Keys)
             {
                 if (workerId == senderId)
@@ -117,40 +118,29 @@ namespace floorplan_evacuation_mas
                 }
             }
 
-            var closestExit = ExitPositions.Select(kvp =>
-                    new KeyValuePair<Point, int>(kvp.Value,
-                        Utils.Distance(kvp.Value, WorkerPositions[senderId])))
-                .Where(kvp => InFieldOfView(kvp.Key, WorkerPositions[senderId]))
-                .OrderBy(kvp => kvp.Value)
-                .FirstOrDefault();
-
-            if (closestExit.Equals(default(KeyValuePair<Point, int>)) ||
-                numberOfPositionChanges[senderId] < turnsUntilEmergency)
+            // Exit if emergency is declared 
+            if (isEmergencyDeclared(senderId) && ExitPositions.Values.Contains(WorkerPositions[senderId]))
             {
-                var moveMessage = BuildFloorPlanMessage(MessageType.Move, WorkerPositions[senderId]);
-                Send(sender, JsonSerializer.Serialize(moveMessage));
-            }
-            else
-            {
-                // If worker is on exit
-                if (closestExit.Value == 0)
-                {
-                    var exitMessage = BuildFloorPlanMessage(MessageType.Exit, WorkerPositions[senderId]);
-                    Send(sender, JsonSerializer.Serialize(exitMessage));
+                var exitMessage = BuildFloorPlanMessage(MessageType.Exit, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(exitMessage));
 
-                    WorkerPositions.Remove(senderId);
-                    this.Environment.Remove(sender);
-                    if (WorkerPositions.Count == 0)
-                    {
-                        this.Stop();
-                    }
-                }
-                else
+                WorkerPositions.Remove(senderId);
+                this.Environment.Remove(sender);
+                if (WorkerPositions.Count == 0)
                 {
-                    var planMessage = BuildFloorPlanMessage(MessageType.ExitNearby, WorkerPositions[senderId]);
-                    Send(sender, JsonSerializer.Serialize(planMessage));
+                    this.Stop();
                 }
+                return;
             }
+
+            // Only thing remaining to do is acknowledge the move
+            var moveMessage = BuildFloorPlanMessage(MessageType.Move, WorkerPositions[senderId]);
+            Send(sender, JsonSerializer.Serialize(moveMessage));
+        }
+
+        private bool isEmergencyDeclared(int senderId)
+        {
+            return numberOfPositionChanges[senderId] >= turnsUntilEmergency;
         }
 
         private FloorPlanMessage BuildFloorPlanMessage(string type, Point position)

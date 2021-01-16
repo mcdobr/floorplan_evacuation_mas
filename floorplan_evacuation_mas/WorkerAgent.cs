@@ -68,7 +68,17 @@ namespace floorplan_evacuation_mas
                         }
                         else
                         {
-                            MoveInDirection();
+                            if (receivedMessage.exitsInFieldOfViewPositions.Count == 0)
+                            {
+                                MoveInDirection();
+                            }
+                            else
+                            {
+                                Point candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                                    new Point(X, Y)));
+                                X = candidate.X;
+                                Y = candidate.Y;
+                            }
                         }
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
@@ -100,18 +110,6 @@ namespace floorplan_evacuation_mas
                             MoveInOtherDirection();
                         }
 
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.ChangePosition;
-                        changePositionMessage.position = new Point(X, Y);
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        break;
-                    }
-                    case MessageType.ExitNearby:
-                    {
-                        state = State.MovingTowardsExit;
-                        var point = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions, new Point(X, Y)));
-                        this.X = point.X;
-                        this.Y = point.Y;
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
                         changePositionMessage.type = MessageType.ChangePosition;
                         changePositionMessage.position = new Point(X, Y);
