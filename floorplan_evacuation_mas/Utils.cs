@@ -20,6 +20,15 @@ namespace floorplan_evacuation_mas
             return int.Parse(sender.Replace("Worker ", string.Empty));
         }
 
+        public static Point closestPoint(List<Point> candidates, Point relativeTo)
+        {
+            return candidates.Select(candidate =>
+                    new KeyValuePair<Point, int>(candidate, Distance(candidate, relativeTo)))
+                .OrderBy(kvp => kvp.Value)
+                .First()
+                .Key;
+        }
+
         public static int Distance(Point exitPosition, Point workerPosition)
         {
             return Math.Abs(exitPosition.X - workerPosition.X) +

@@ -113,10 +113,7 @@ namespace floorplan_evacuation_mas
                     case MessageType.ExitNearby:
                     {
                         state = State.MovingTowardsExit;
-
-                        // todo: this should be the CLOSEST exit from exits now
-                        var closestExitPosition = receivedMessage.exitsInFieldOfViewPositions.First();
-                        var point = MoveNear(closestExitPosition);
+                        var point = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions, new Point(X, Y)));
                         this.X = point.X;
                         this.Y = point.Y;
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
