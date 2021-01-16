@@ -127,7 +127,7 @@ namespace floorplan_evacuation_mas
             var closestExit = ExitPositions.Select(kvp =>
                     new KeyValuePair<Point, int>(kvp.Value,
                         Utils.Distance(kvp.Value, WorkerPositions[senderId])))
-                .Where(kvp => ExitInFieldOfView(kvp.Key, WorkerPositions[senderId]))
+                .Where(kvp => InFieldOfView(kvp.Key, WorkerPositions[senderId]))
                 .OrderBy(kvp => kvp.Value)
                 .FirstOrDefault();
 
@@ -158,19 +158,30 @@ namespace floorplan_evacuation_mas
                 }
                 else
                 {
-                    var planMessage = new FloorPlanMessage();
-                    planMessage.type = MessageType.ExitNearby;
-                    planMessage.exitsInFieldOfViewPositions.Add(closestExit.Key);
-                    // todo: send all exits
+                    var planMessage = BuildFloorPlanMessage(MessageType.ExitNearby, WorkerPositions[senderId]);
                     Send(sender, JsonSerializer.Serialize(planMessage));
                 }
             }
         }
 
-        private bool ExitInFieldOfView(Point exitPosition, Point workerPosition)
+        private FloorPlanMessage BuildFloorPlanMessage(string type, Point position)
         {
-            return Math.Abs(exitPosition.X - workerPosition.X) <= FieldOfViewRadius &&
-                   Math.Abs(exitPosition.Y - workerPosition.Y) <= FieldOfViewRadius;
+            var planMessage = new FloorPlanMessage();
+            planMessage.type = type;
+            planMessage.position = position;
+            planMessage.exitsInFieldOfViewPositions = ExitPositions.Values
+                .Where(exitPosition => InFieldOfView(exitPosition, position))
+                .ToList();
+            planMessage.agentsInFieldOfViewPositions = WorkerPositions.Values
+                .Where(agentPosition => InFieldOfView(agentPosition, position) && !agentPosition.Equals(position))
+                .ToList();
+            return planMessage;
+        }
+
+        private bool InFieldOfView(Point target, Point origin)
+        {
+            return Math.Abs(target.X - origin.X) <= FieldOfViewRadius &&
+                   Math.Abs(target.Y - origin.Y) <= FieldOfViewRadius;
         }
     }
 }
