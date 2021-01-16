@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ActressMas;
 using static floorplan_evacuation_mas.MessageType;
@@ -42,7 +43,11 @@ namespace floorplan_evacuation_mas
         public override void Setup()
         {
             Console.WriteLine("Starting worker " + Id);
-            Send(MonitorAgent.Monitor, Utils.Str(Position, X, Y));
+
+            FloorPlanMessage positionMessage = new FloorPlanMessage();
+            positionMessage.type = MessageType.Position;
+            positionMessage.position = new Point(X, Y);
+            Send(MonitorAgent.Monitor, JsonSerializer.Serialize(positionMessage));
         }
 
         public override void Act(Queue<Message> messages)
@@ -51,13 +56,16 @@ namespace floorplan_evacuation_mas
             {
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
-                string action;
-                string parameters;
-                Utils.ParseMessage(message.Content, out action, out parameters);
+                // string action;
+                // string parameters;
+                // Utils.ParseMessage(message.Content, out action, out parameters);
 
-                switch (action)
+                FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
+
+                switch (receivedMessage.type)
                 {
                     case MessageType.Move:
+                    {
                         if (state == State.MovingRandomly)
                         {
                             MoveRandomly();
@@ -67,14 +75,25 @@ namespace floorplan_evacuation_mas
                             MoveInDirection();
                         }
 
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.ChangePosition;
+                        changePositionMessage.position = new Point(X, Y);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case MessageType.Emergency:
+                    {
                         state = State.MovingInConstantDirection;
                         MoveInDirection();
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.ChangePosition;
+                        changePositionMessage.position = new Point(X, Y);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case MessageType.Block:
+                    {
                         // todo: could exclude blocked old dir
                         if (state == State.MovingRandomly)
                         {
@@ -84,30 +103,46 @@ namespace floorplan_evacuation_mas
                         {
                             MoveInOtherDirection();
                         }
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.ChangePosition;
+                        changePositionMessage.position = new Point(X, Y);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case MessageType.ExitNearby:
+                    {
                         state = State.MovingTowardsExit;
-                        var exitPosition = Utils.ParsePosition(parameters);
-                        (this.X, this.Y) = MoveNear(exitPosition);
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+
+                        // todo: this should be the CLOSEST exit from exits now
+                        var closestExitPosition = receivedMessage.exitsInFieldOfViewPositions.First();
+                        var point = MoveNear(closestExitPosition);
+                        this.X = point.X;
+                        this.Y = point.Y;
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.ChangePosition;
+                        changePositionMessage.position = new Point(X, Y);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case Exit:
+                    {
                         break;
+                    }
                     default:
                         throw new NotImplementedException();
                 }
             }
         }
 
-        private Tuple<int, int> MoveNear(Tuple<int, int> exitPosition)
+        private Point MoveNear(Point exitPosition)
         {
             var closestPositionToExit = new List<Direction>
                     {Direction.Up, Direction.Down, Direction.Left, Direction.Right}
                 .Select(dir => GetAdjacent(dir))
                 .Where(adjacentPosition => IsInBounds(adjacentPosition))
                 .Select(position =>
-                    new KeyValuePair<Tuple<int, int>, int>(position, Utils.Distance(exitPosition, position)))
+                    new KeyValuePair<Point, int>(position, Utils.Distance(exitPosition, position)))
                 .OrderBy(kvp => kvp.Value)
                 .First().Key;
 
@@ -126,6 +161,7 @@ namespace floorplan_evacuation_mas
             {
                 this.direction = GenerateDirection();
             }
+
             executeMoveInDirection();
         }
 
@@ -151,23 +187,24 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        private bool IsInBounds(Tuple<int, int> position)
+        // todo: wtf does this do?
+        private bool IsInBounds(Point position)
         {
             return X >= 0 && X < Utils.Size && Y >= 0 && Y < Utils.Size;
         }
 
-        private Tuple<int, int> GetAdjacent(Direction dir)
+        private Point GetAdjacent(Direction dir)
         {
             switch (dir)
             {
                 case Direction.Up:
-                    return new Tuple<int,int>(X-1, Y);
+                    return new Point(X - 1, Y);
                 case Direction.Down:
-                    return new Tuple<int, int>(X+1, Y);
+                    return new Point(X + 1, Y);
                 case Direction.Left:
-                    return new Tuple<int, int>(X, Y-1);
+                    return new Point(X, Y - 1);
                 case Direction.Right:
-                    return new Tuple<int, int>(X, Y+1);
+                    return new Point(X, Y + 1);
                 default:
                     throw new NotImplementedException();
             }

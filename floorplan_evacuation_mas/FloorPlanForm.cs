@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using floorplan_evacuation_mas;
+using Point = floorplan_evacuation_mas.Point;
 
 namespace Reactive
 {
@@ -61,21 +62,21 @@ namespace Reactive
 
             if (ownerAgent != null)
             {
-                foreach (Tuple<int, int> workerPosition in ownerAgent.WorkerPositions.Values)
+                foreach (Point workerPosition in ownerAgent.WorkerPositions.Values)
                 {
                     g.FillEllipse(Brushes.Blue,
-                        20 + workerPosition.Item1 * cellSize + 6,
-                        20 + workerPosition.Item2 * cellSize + 6,
+                        20 + workerPosition.X * cellSize + 6,
+                        20 + workerPosition.Y * cellSize + 6,
                         cellSize - 12,
                         cellSize - 12
                     );
                 }
 
-                foreach (Tuple<int, int> exitPosition in ownerAgent.ExitPositions.Values)
+                foreach (Point exitPosition in ownerAgent.ExitPositions.Values)
                 {
                     g.FillRectangle(Brushes.LightGreen,
-                        20 + exitPosition.Item1 * cellSize + 10,
-                        20 + exitPosition.Item2 * cellSize + 10,
+                        20 + exitPosition.X * cellSize + 10,
+                        20 + exitPosition.Y * cellSize + 10,
                         cellSize - 20,
                         cellSize - 20
                     );

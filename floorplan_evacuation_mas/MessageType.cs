@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace floorplan_evacuation_mas
 {
-    class MessageType
+    public class MessageType
     {
         public const string Position = "position";
         public const string Move = "move";

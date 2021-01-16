@@ -5,9 +5,17 @@ namespace floorplan_evacuation_mas
 {
     public class FloorPlanMessage
     {
-        private string type { get; set; }
-        private Tuple<int, int> position { get; set; }
-        private List<Tuple<int, int>> exitsInFieldOfViewPositions { get; set; }
-        private List<Tuple<int, int>> agentsInFieldOfViewPositions { get; set; }
+        public string type { get; set; }
+        public Point position { get; set; }
+        public List<Point> exitsInFieldOfViewPositions { get; set; }
+        public List<Point> agentsInFieldOfViewPositions { get; set; }
+
+        public FloorPlanMessage()
+        {
+            this.type = null;
+            this.position = null;
+            this.exitsInFieldOfViewPositions = new List<Point>();
+            this.agentsInFieldOfViewPositions = new List<Point>();
+        }
     }
 }
