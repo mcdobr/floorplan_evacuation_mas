@@ -100,9 +100,8 @@ namespace floorplan_evacuation_mas
             WorkerPositions[senderId] = floorPlanMessage.position;
             if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
             {
-                var planMessage = new FloorPlanMessage();
-                planMessage.type = Emergency;
-                Send(sender, JsonSerializer.Serialize(planMessage));
+                var emergencyMessage = BuildFloorPlanMessage(MessageType.Emergency, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(emergencyMessage));
                 return;
             }
 
@@ -112,9 +111,8 @@ namespace floorplan_evacuation_mas
                     continue;
                 if (WorkerPositions[workerId].Equals(WorkerPositions[senderId]))
                 {
-                    var planMessage = new FloorPlanMessage();
-                    planMessage.type = Block;
-                    Send(sender, JsonSerializer.Serialize(planMessage));
+                    var blockMessage = BuildFloorPlanMessage(MessageType.Block, WorkerPositions[senderId]);
+                    Send(sender, JsonSerializer.Serialize(blockMessage));
                     return;
                 }
             }
@@ -129,20 +127,16 @@ namespace floorplan_evacuation_mas
             if (closestExit.Equals(default(KeyValuePair<Point, int>)) ||
                 numberOfPositionChanges[senderId] < turnsUntilEmergency)
             {
-                var planMessage = new FloorPlanMessage();
-                planMessage.type = MessageType.Move;
-                Send(sender, JsonSerializer.Serialize(planMessage));
+                var moveMessage = BuildFloorPlanMessage(MessageType.Move, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(moveMessage));
             }
             else
             {
                 // If worker is on exit
                 if (closestExit.Value == 0)
                 {
-                    var planMessage = new FloorPlanMessage();
-                    planMessage.type = MessageType.Exit;
-                    planMessage.exitsInFieldOfViewPositions.Add(closestExit.Key);
-                    // todo: send all exits
-                    Send(sender, JsonSerializer.Serialize(planMessage));
+                    var exitMessage = BuildFloorPlanMessage(MessageType.Exit, WorkerPositions[senderId]);
+                    Send(sender, JsonSerializer.Serialize(exitMessage));
 
                     WorkerPositions.Remove(senderId);
                     this.Environment.Remove(sender);
