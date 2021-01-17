@@ -21,6 +21,7 @@ namespace floorplan_evacuation_mas
         private State state;
         private Direction direction;
 
+        private bool running;
         private FloorPlanMessage lastReceivedMessageFromMonitor = null;
         private int waitTurns;
 
@@ -32,6 +33,7 @@ namespace floorplan_evacuation_mas
             this.id = id;
             this.position = new Point(x, y);
             this.state = State.MovingRandomly;
+            this.running = true;
         }
 
         public int Id => id;
@@ -48,7 +50,7 @@ namespace floorplan_evacuation_mas
 
         public override void Act(Queue<Message> messages)
         {
-            while (messages.Count > 0)
+            while (messages.Count > 0 && running)
             {
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
@@ -85,10 +87,10 @@ namespace floorplan_evacuation_mas
             {
                 case MessageType.PeerQuestion:
                 {
-                    // string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
-                    // ? MessageType.PeerAffirmative
-                    // : MessageType.PeerNegative;
-                    string messageType = PeerNegative;
+                    string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
+                        ? MessageType.PeerAffirmative
+                        : MessageType.PeerNegative;
+                    // string messageType = PeerNegative;
                     FloorPlanMessage response =
                         new FloorPlanMessage(messageType, lastReceivedMessageFromMonitor.position);
                     Send(message.Sender, JsonSerializer.Serialize(response));
@@ -96,11 +98,12 @@ namespace floorplan_evacuation_mas
                 }
                 case MessageType.PeerAffirmative:
                 {
+                    // todo: following not working right, but deadlock cooldown
+                    // is implemented by not asking that agent again for a number of turns
                     if (state == State.WaitingForPeerResponses)
                     {
                         state = State.FollowingOther;
-                        var candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
-                            this.position));
+                        var candidate = MoveNear(receivedMessage.position);
                         FloorPlanMessage changePositionMessage =
                             new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
@@ -147,11 +150,13 @@ namespace floorplan_evacuation_mas
                 }
                 case Exit:
                 {
+                    running = false;
                     break;
                 }
                 default:
                     throw new NotImplementedException();
             }
+
             lastReceivedMessageFromMonitor = receivedMessage;
         }
 
@@ -164,17 +169,17 @@ namespace floorplan_evacuation_mas
             }
             else
             {
-                if (receivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0) // message from monitor
+                if (receivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0)
                 {
                     state = State.MovingTowardsExit;
                     candidate = MoveNear(Utils.closestPoint(receivedMessageFromMonitor.exitsInFieldOfViewPositions,
                         this.position));
                 }
-                else if (receivedMessageFromMonitor.agentsInFieldOfViewPositions.Count > 0) // message from monitor
+                else if (receivedMessageFromMonitor.agentsInFieldOfViewPositions.Count > 0)
                 {
                     receivedMessageFromMonitor.agentsInFieldOfViewPositions.ForEach(peerAgent =>
                     {
-                        var peerQuestionMessage = new FloorPlanMessage(MessageType.PeerQuestion, this.position);
+                        var peerQuestionMessage = new FloorPlanMessage(MessageType.PeerQuestion, peerAgent.Position);
                         if (!blockList.ContainsKey(peerAgent.Id) ||
                             (blockList.ContainsKey(peerAgent.Id) && blockList[peerAgent.Id] <= 0))
                         {
@@ -182,8 +187,11 @@ namespace floorplan_evacuation_mas
                         }
                     });
 
-                    // We assume that it does not move until a number of turns pass or it gets a response
-                    // TODO: move in a direction until you get a response
+                    // move in a direction until you get a response
+
+                    // todo: our strategy might not be the best because then we have to handle inconsistencies by getting blocked by the monitor,
+                    //  but otherwise we need other stateful solution to let time pass (we focused on turns which are linked to messages received, but if we do not
+                    //  send message to monitor, we don't progress)
                     if (receivedMessageFromMonitor.type == MessageType.Block)
                     {
                         candidate = MoveInOtherDirection();
@@ -195,7 +203,7 @@ namespace floorplan_evacuation_mas
 
                     state = State.WaitingForPeerResponses;
                 }
-                else //message from monitor
+                else
                 {
                     if (receivedMessageFromMonitor.type == MessageType.Block)
                     {
@@ -275,7 +283,6 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        // todo: wtf does this do?
         private bool IsInBounds(Point position)
         {
             return this.position.X >= 0 && this.position.X < Utils.Size && this.position.Y >= 0 &&

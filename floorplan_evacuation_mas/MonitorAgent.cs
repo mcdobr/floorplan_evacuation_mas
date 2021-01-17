@@ -108,9 +108,24 @@ namespace floorplan_evacuation_mas
                 }
             }
 
+            // todo: block if server is congested
+            if (WorkerPositions.ContainsKey(senderId) && Utils.Distance(WorkerPositions[senderId], receivedMessage.position) > 1)
+            {
+                var blockMessage = BuildFloorPlanMessage(MessageType.Block, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(blockMessage));
+                return;
+            }
+
             // Allow the requested move
-            WorkerPositions[senderId] = receivedMessage.position;
-            
+            if (!WorkerPositions.ContainsKey(senderId))
+            {
+                return;
+            }
+            else
+            {
+                WorkerPositions[senderId] = receivedMessage.position;
+            }
+
             // Should declare emergency
             if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
             {
