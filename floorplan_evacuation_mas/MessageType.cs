@@ -6,14 +6,13 @@ using System.Threading.Tasks;
 
 namespace floorplan_evacuation_mas
 {
-    class MessageType
+    public class MessageType
     {
-        public const string Position = "position";
+        public const string Start = "start";
+        public const string Acknowledge = "acknowledge";
         public const string Move = "move";
-        public const string ChangePosition = "change";
         public const string Emergency = "emergency";
         public const string Block = "block";
-        public const string ExitNearby = "exitNearby";
         public const string Exit = "exit";
     }
 }

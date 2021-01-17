@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ActressMas;
 using static floorplan_evacuation_mas.MessageType;
@@ -12,37 +13,28 @@ namespace floorplan_evacuation_mas
     class WorkerAgent : TurnBasedAgent
     {
         private int id;
-        private int x;
-        private int y;
+        private Point position;
         private State state;
         private Direction direction;
 
         public WorkerAgent(int id, int x, int y)
         {
             this.id = id;
-            this.x = x;
-            this.y = y;
+            this.position = new Point(x, y);
             this.state = State.MovingRandomly;
         }
 
         public int Id => id;
 
-        public int X
-        {
-            get => x;
-            set => x = value;
-        }
-
-        public int Y
-        {
-            get => y;
-            set => y = value;
-        }
 
         public override void Setup()
         {
             Console.WriteLine("Starting worker " + Id);
-            Send(MonitorAgent.Monitor, Utils.Str(Position, X, Y));
+
+            FloorPlanMessage positionMessage = new FloorPlanMessage();
+            positionMessage.type = MessageType.Start;
+            positionMessage.position = this.position;
+            Send(MonitorAgent.Monitor, JsonSerializer.Serialize(positionMessage));
         }
 
         public override void Act(Queue<Message> messages)
@@ -51,82 +43,117 @@ namespace floorplan_evacuation_mas
             {
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
-                string action;
-                string parameters;
-                Utils.ParseMessage(message.Content, out action, out parameters);
 
-                switch (action)
+                FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
+                this.position = receivedMessage.position;
+                switch (receivedMessage.type)
                 {
-                    case MessageType.Move:
+                    case MessageType.Acknowledge:
+                    {
+                        Point candidate = null;
                         if (state == State.MovingRandomly)
                         {
-                            MoveRandomly();
+                            candidate = MoveRandomly();
                         }
                         else
                         {
-                            MoveInDirection();
+                            if (receivedMessage.exitsInFieldOfViewPositions.Count == 0)
+                            {
+                                candidate = MoveInDirection();
+                            }
+                            else
+                            {
+                                candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                                    this.position));
+                            }
                         }
 
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case MessageType.Emergency:
+                    {
                         state = State.MovingInConstantDirection;
-                        MoveInDirection();
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+                        var candidate = MoveInDirection();
+
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
+                    }
                     case MessageType.Block:
+                    {
                         // todo: could exclude blocked old dir
+                        Point candidate = null;
                         if (state == State.MovingRandomly)
                         {
-                            MoveRandomly();
+                            candidate = MoveRandomly();
                         }
                         else
                         {
-                            MoveInOtherDirection();
+                            candidate = MoveInOtherDirection();
                         }
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
+
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
+                        changePositionMessage.type = MessageType.Move;
+                        changePositionMessage.position = candidate;
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
-                    case MessageType.ExitNearby:
-                        state = State.MovingTowardsExit;
-                        var exitPosition = Utils.ParsePosition(parameters);
-                        (this.X, this.Y) = MoveNear(exitPosition);
-                        Send(MonitorAgent.Monitor, Utils.Str(MessageType.ChangePosition, X, Y));
-                        break;
+                    }
                     case Exit:
+                    {
                         break;
+                    }
                     default:
                         throw new NotImplementedException();
                 }
             }
         }
 
-        private Tuple<int, int> MoveNear(Tuple<int, int> exitPosition)
+        private Point MoveNear(Point exitPosition)
         {
             var closestPositionToExit = new List<Direction>
                     {Direction.Up, Direction.Down, Direction.Left, Direction.Right}
                 .Select(dir => GetAdjacent(dir))
                 .Where(adjacentPosition => IsInBounds(adjacentPosition))
                 .Select(position =>
-                    new KeyValuePair<Tuple<int, int>, int>(position, Utils.Distance(exitPosition, position)))
+                    new KeyValuePair<Point, int>(position, Utils.Distance(exitPosition, position)))
                 .OrderBy(kvp => kvp.Value)
                 .First().Key;
 
             return closestPositionToExit;
         }
 
-        private void MoveInOtherDirection()
+        private Point MoveInOtherDirection()
         {
             this.direction = GenerateDirection();
-            MoveInDirection();
+            return MoveInDirection();
         }
 
-        private void MoveInDirection()
+        private Point MoveInDirection()
         {
             while (!CanMoveWithinBounds())
             {
                 this.direction = GenerateDirection();
             }
-            executeMoveInDirection();
+
+            switch (this.direction)
+            {
+                case Direction.Up:
+                    return new Point(this.position.X - 1, this.position.Y);
+                case Direction.Down:
+                    return new Point(this.position.X + 1, this.position.Y);
+                case Direction.Left:
+                    return new Point(this.position.X, this.position.Y - 1);
+                case Direction.Right:
+                    return new Point(this.position.X, this.position.Y + 1);
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         private bool CanMoveWithinBounds()
@@ -139,63 +166,70 @@ namespace floorplan_evacuation_mas
             switch (dir)
             {
                 case Direction.Up:
-                    return (X > 0);
+                    return (this.position.X > 0);
                 case Direction.Down:
-                    return (X < Utils.Size - 1);
+                    return (this.position.X < Utils.Size - 1);
                 case Direction.Left:
-                    return (Y > 0);
+                    return (this.position.Y > 0);
                 case Direction.Right:
-                    return (Y < Utils.Size - 1);
+                    return (this.position.Y < Utils.Size - 1);
                 default:
                     throw new NotImplementedException();
             }
         }
 
-        private bool IsInBounds(Tuple<int, int> position)
+        // todo: wtf does this do?
+        private bool IsInBounds(Point position)
         {
-            return X >= 0 && X < Utils.Size && Y >= 0 && Y < Utils.Size;
+            return this.position.X >= 0 && this.position.X < Utils.Size && this.position.Y >= 0 &&
+                   this.position.Y < Utils.Size;
         }
 
-        private Tuple<int, int> GetAdjacent(Direction dir)
+        private Point GetAdjacent(Direction dir)
         {
             switch (dir)
             {
                 case Direction.Up:
-                    return new Tuple<int,int>(X-1, Y);
+                    return new Point(this.position.X - 1, this.position.Y);
                 case Direction.Down:
-                    return new Tuple<int, int>(X+1, Y);
+                    return new Point(this.position.X + 1, this.position.Y);
                 case Direction.Left:
-                    return new Tuple<int, int>(X, Y-1);
+                    return new Point(this.position.X, this.position.Y - 1);
                 case Direction.Right:
-                    return new Tuple<int, int>(X, Y+1);
+                    return new Point(this.position.X, this.position.Y + 1);
                 default:
                     throw new NotImplementedException();
             }
         }
 
-        private void MoveRandomly()
+        private Point MoveRandomly()
         {
-            this.direction = GenerateDirection();
-            executeMoveInDirection();
-        }
-
-        private void executeMoveInDirection()
-        {
-            switch (this.direction)
+            Point result = null;
+            do
             {
-                case Direction.Up:
-                    if (X > 0) X--;
-                    break;
-                case Direction.Down:
-                    if (X < Utils.Size - 1) X++;
-                    break;
-                case Direction.Left:
-                    if (Y > 0) Y--;
-                    break;
-                case Direction.Right:
-                    if (Y < Utils.Size - 1) Y++;
-                    break;
-            }
+                this.direction = GenerateDirection();
+                switch (this.direction)
+                {
+                    case Direction.Up:
+                        if (this.position.X > 0)
+                            result = new Point(this.position.X - 1, this.position.Y);
+                        break;
+                    case Direction.Down:
+                        if (this.position.X < Utils.Size - 1)
+                            result = new Point(this.position.X + 1, this.position.Y);
+                        break;
+                    case Direction.Left:
+                        if (this.position.Y > 0)
+                            result = new Point(this.position.X, this.position.Y - 1);
+                        break;
+                    case Direction.Right:
+                        if (this.position.Y < Utils.Size - 1)
+                            result = new Point(this.position.X, this.position.Y + 1);
+                        break;
+                }
+            } while (result == null);
+
+            return result;
         }
 
         private static Direction GenerateDirection()

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -23,14 +25,14 @@ namespace floorplan_evacuation_mas
         private int turnsUntilEmergency;
 
         private Dictionary<int, int> numberOfPositionChanges;
-        public Dictionary<int, Tuple<int, int>> WorkerPositions { get; set; }
-        public Dictionary<int, Tuple<int, int>> ExitPositions { get; set; }
+        public Dictionary<int, Point> WorkerPositions { get; set; }
+        public Dictionary<int, Point> ExitPositions { get; set; }
 
 
         public MonitorAgent(
             int turnsUntilEmergency,
-            Dictionary<int, Tuple<int, int>> workerPositions,
-            Dictionary<int, Tuple<int, int>> exitPositions
+            Dictionary<int, Point> workerPositions,
+            Dictionary<int, Point> exitPositions
         )
         {
             this.turnsUntilEmergency = turnsUntilEmergency;
@@ -62,17 +64,15 @@ namespace floorplan_evacuation_mas
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
-                string action;
-                string parameters;
-                Utils.ParseMessage(message.Content, out action, out parameters);
+                FloorPlanMessage floorPlanMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
 
-                switch (action)
+                switch (floorPlanMessage.type)
                 {
-                    case Position:
-                        HandlePosition(message.Sender, parameters);
+                    case Start:
+                        HandleStart(message.Sender, floorPlanMessage);
                         break;
-                    case ChangePosition:
-                        HandleChangePosition(message.Sender, parameters);
+                    case MessageType.Move:
+                        HandleChangePosition(message.Sender, floorPlanMessage);
                         break;
                     default:
                         break;
@@ -82,70 +82,86 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        private void HandlePosition(string sender, string position)
+        private void HandleStart(string sender, FloorPlanMessage startMessage)
         {
             int senderId = Utils.ParsePeer(sender);
-            WorkerPositions.Add(senderId, Utils.ParsePosition(position));
+            WorkerPositions.Add(senderId, startMessage.position);
             numberOfPositionChanges[senderId] = 0;
-            Send(sender, MessageType.Move);
+
+            FloorPlanMessage ackMessage = BuildFloorPlanMessage(MessageType.Acknowledge, WorkerPositions[senderId]);
+            Send(sender, JsonSerializer.Serialize(ackMessage));
         }
 
-        private void HandleChangePosition(string sender, string parameters)
+        private void HandleChangePosition(string sender, FloorPlanMessage receivedMessage)
         {
             int senderId = Utils.ParsePeer(sender);
-            WorkerPositions[senderId] = Utils.ParsePosition(parameters);
-            if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
-            {
-                Send(sender, MessageType.Emergency);
-                return;
-            }
-
+            // Block is handled regardless if in emergency or not
             foreach (int workerId in WorkerPositions.Keys)
             {
                 if (workerId == senderId)
                     continue;
-                if (WorkerPositions[workerId].Equals(WorkerPositions[senderId]))
+                if (WorkerPositions[workerId].Equals(receivedMessage.position))
                 {
-                    Send(sender, MessageType.Block);
+                    var blockMessage = BuildFloorPlanMessage(MessageType.Block, WorkerPositions[senderId]);
+                    Send(sender, JsonSerializer.Serialize(blockMessage));
                     return;
                 }
             }
 
-            var closestExit = ExitPositions.Select(kvp =>
-                    new KeyValuePair<Tuple<int, int>, int>(kvp.Value,
-                        Utils.Distance(kvp.Value, WorkerPositions[senderId])))
-                .Where(kvp => ExitInFieldOfView(kvp.Key, WorkerPositions[senderId]))
-                .OrderBy(kvp => kvp.Value)
-                .FirstOrDefault();
+            // Allow the requested move
+            WorkerPositions[senderId] = receivedMessage.position;
+            
+            // Should declare emergency
+            if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
+            {
+                var emergencyMessage = BuildFloorPlanMessage(MessageType.Emergency, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(emergencyMessage));
+                return;
+            }
 
-            if (closestExit.Equals(default(KeyValuePair<Tuple<int, int>, int>)) ||
-                numberOfPositionChanges[senderId] < turnsUntilEmergency)
+            // Exit if emergency is declared 
+            if (isEmergencyDeclared(senderId) && ExitPositions.Values.Contains(WorkerPositions[senderId]))
             {
-                Send(sender, MessageType.Move);
-            }
-            else
-            {
-                if (closestExit.Value == 0)
+                var exitMessage = BuildFloorPlanMessage(MessageType.Exit, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(exitMessage));
+
+                WorkerPositions.Remove(senderId);
+                this.Environment.Remove(sender);
+                if (WorkerPositions.Count == 0)
                 {
-                    Send(sender, Utils.Str(MessageType.Exit, (closestExit)));
-                    WorkerPositions.Remove(senderId);
-                    this.Environment.Remove(sender);
-                    if (WorkerPositions.Count == 0)
-                    {
-                        this.Stop();
-                    }
+                    this.Stop();
                 }
-                else
-                {
-                    Send(sender, Utils.Str(MessageType.ExitNearby, closestExit.Key.Item1, closestExit.Key.Item2));
-                }
+                return;
             }
+
+            // Only thing remaining to do is acknowledge the move
+            var moveMessage = BuildFloorPlanMessage(MessageType.Acknowledge, WorkerPositions[senderId]);
+            Send(sender, JsonSerializer.Serialize(moveMessage));
         }
 
-        private bool ExitInFieldOfView(Tuple<int, int> exitPosition, Tuple<int, int> workerPosition)
+        private bool isEmergencyDeclared(int senderId)
         {
-            return Math.Abs(exitPosition.Item1 - workerPosition.Item1) <= FieldOfViewRadius &&
-                   Math.Abs(exitPosition.Item2 - workerPosition.Item2) <= FieldOfViewRadius;
+            return numberOfPositionChanges[senderId] >= turnsUntilEmergency;
+        }
+
+        private FloorPlanMessage BuildFloorPlanMessage(string type, Point position)
+        {
+            var planMessage = new FloorPlanMessage();
+            planMessage.type = type;
+            planMessage.position = position;
+            planMessage.exitsInFieldOfViewPositions = ExitPositions.Values
+                .Where(exitPosition => InFieldOfView(exitPosition, position))
+                .ToList();
+            planMessage.agentsInFieldOfViewPositions = WorkerPositions.Values
+                .Where(agentPosition => InFieldOfView(agentPosition, position) && !agentPosition.Equals(position))
+                .ToList();
+            return planMessage;
+        }
+
+        private bool InFieldOfView(Point target, Point origin)
+        {
+            return Math.Abs(target.X - origin.X) <= FieldOfViewRadius &&
+                   Math.Abs(target.Y - origin.Y) <= FieldOfViewRadius;
         }
     }
 }
