@@ -51,10 +51,7 @@ namespace floorplan_evacuation_mas
                     case MessageType.Acknowledge:
                     {
                         var candidate = PickCandidate(receivedMessage);
-
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
@@ -62,21 +59,14 @@ namespace floorplan_evacuation_mas
                     {
                         state = State.MovingInConstantDirection;
                         var candidate = PickCandidate(receivedMessage);
-
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
                     case MessageType.Block:
                     {
                         Point candidate = PickCandidate(receivedMessage);
-                        
-
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
+                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                         break;
                     }
@@ -106,7 +96,7 @@ namespace floorplan_evacuation_mas
                 }
                 else
                 {
-                    if (receivedMessage.type == Block)
+                    if (receivedMessage.type == MessageType.Block)
                     {
                         candidate = MoveInOtherDirection();
                     }
@@ -116,6 +106,7 @@ namespace floorplan_evacuation_mas
                     }
                 }
             }
+
             return candidate;
         }
 

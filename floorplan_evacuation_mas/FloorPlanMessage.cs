@@ -17,5 +17,13 @@ namespace floorplan_evacuation_mas
             this.exitsInFieldOfViewPositions = new List<Point>();
             this.agentsInFieldOfViewPositions = new List<Point>();
         }
+
+        public FloorPlanMessage(string typ, Point point)
+        {
+            this.type = typ;
+            this.position = point;
+            this.exitsInFieldOfViewPositions = new List<Point>();
+            this.agentsInFieldOfViewPositions = new List<Point>();
+        }
     }
 }
