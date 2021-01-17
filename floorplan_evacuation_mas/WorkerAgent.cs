@@ -7,15 +7,25 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ActressMas;
 using static floorplan_evacuation_mas.MessageType;
+using Environment = ActressMas.Environment;
 
 namespace floorplan_evacuation_mas
 {
     class WorkerAgent : TurnBasedAgent
     {
+        private const int waitForAnswerTurns = 4;
+        private const int cooldownForTalking = 5;
+
         private int id;
         private Point position;
         private State state;
         private Direction direction;
+
+        private FloorPlanMessage lastReceivedMessageFromMonitor = null;
+        private int waitTurns;
+
+        private Dictionary<int, int> blockList = new Dictionary<int, int>();
+
 
         public WorkerAgent(int id, int x, int y)
         {
@@ -25,7 +35,6 @@ namespace floorplan_evacuation_mas
         }
 
         public int Id => id;
-
 
         public override void Setup()
         {
@@ -45,42 +54,93 @@ namespace floorplan_evacuation_mas
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
                 FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
-                this.position = receivedMessage.position;
                 switch (receivedMessage.type)
                 {
                     case MessageType.Acknowledge:
                     {
+                        this.position = receivedMessage.position;
                         var candidate = PickCandidate(receivedMessage);
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                        lastReceivedMessageFromMonitor = receivedMessage;
                         break;
                     }
                     case MessageType.Emergency:
                     {
+                        this.position = receivedMessage.position;
                         state = State.MovingInConstantDirection;
                         var candidate = PickCandidate(receivedMessage);
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+
+                        lastReceivedMessageFromMonitor = receivedMessage;
                         break;
                     }
                     case MessageType.Block:
                     {
+                        this.position = receivedMessage.position;
                         Point candidate = PickCandidate(receivedMessage);
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
                         Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+
+                        lastReceivedMessageFromMonitor = receivedMessage;
                         break;
                     }
                     case Exit:
                     {
+                        this.position = receivedMessage.position;
+                        break;
+                    }
+                    case MessageType.PeerQuestion:
+                    {
+                        // string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
+                        // ? MessageType.PeerAffirmative
+                        // : MessageType.PeerNegative;
+                        string messageType = PeerNegative;
+                        FloorPlanMessage response =
+                            new FloorPlanMessage(messageType, lastReceivedMessageFromMonitor.position);
+                        Send(message.Sender, JsonSerializer.Serialize(response));
+                        break;
+                    }
+                    case MessageType.PeerAffirmative:
+                    {
+                        if (state == State.WaitingForPeerResponses)
+                        {
+                            state = State.FollowingOther;
+                            var candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                                this.position));
+                            FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                            Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                        }
+
+                        break;
+                    }
+                    case MessageType.PeerNegative:
+                    {
+                        blockList[Utils.ParsePeer(message.Sender)] = cooldownForTalking;
                         break;
                     }
                     default:
                         throw new NotImplementedException();
                 }
+
+
+                blockList = blockList.Select(kvp => new KeyValuePair<int, int>(kvp.Key, kvp.Value - 1))
+                    .Where(kvp => kvp.Value > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value
+                    );
+
+                // if (state == State.WaitingForPeerResponses)
+                // {
+                //     --waitTurns;
+                //     if (wa)
+                // }
             }
         }
 
-        private Point PickCandidate(FloorPlanMessage receivedMessage)
+        private Point PickCandidate(FloorPlanMessage receivedMessageFromMonitor)
         {
             Point candidate = null;
             if (state == State.MovingRandomly)
@@ -89,14 +149,40 @@ namespace floorplan_evacuation_mas
             }
             else
             {
-                if (receivedMessage.exitsInFieldOfViewPositions.Count > 0)
+                if (receivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0) // message from monitor
                 {
-                    candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                    state = State.MovingTowardsExit;
+                    candidate = MoveNear(Utils.closestPoint(receivedMessageFromMonitor.exitsInFieldOfViewPositions,
                         this.position));
                 }
-                else
+                else if (receivedMessageFromMonitor.agentsInFieldOfViewPositions.Count > 0) // message from monitor
                 {
-                    if (receivedMessage.type == MessageType.Block)
+                    receivedMessageFromMonitor.agentsInFieldOfViewPositions.ForEach(peerAgent =>
+                    {
+                        var peerQuestionMessage = new FloorPlanMessage(MessageType.PeerQuestion, this.position);
+                        if (!blockList.ContainsKey(peerAgent.Id) ||
+                            (blockList.ContainsKey(peerAgent.Id) && blockList[peerAgent.Id] <= 0))
+                        {
+                            Send("Worker " + peerAgent.Id, JsonSerializer.Serialize(peerQuestionMessage));
+                        }
+                    });
+
+                    // We assume that it does not move until a number of turns pass or it gets a response
+                    // TODO: move in a direction until you get a response
+                    if (receivedMessageFromMonitor.type == MessageType.Block)
+                    {
+                        candidate = MoveInOtherDirection();
+                    }
+                    else
+                    {
+                        candidate = MoveInDirection();
+                    }
+
+                    state = State.WaitingForPeerResponses;
+                }
+                else //message from monitor
+                {
+                    if (receivedMessageFromMonitor.type == MessageType.Block)
                     {
                         candidate = MoveInOtherDirection();
                     }
@@ -237,7 +323,9 @@ namespace floorplan_evacuation_mas
         {
             MovingRandomly,
             MovingInConstantDirection,
-            MovingTowardsExit
+            MovingTowardsExit,
+            WaitingForPeerResponses,
+            FollowingOther
         };
 
         //todo: The labels are wrong because x is the column and y is the line (start from top left corner)

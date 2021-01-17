@@ -152,8 +152,9 @@ namespace floorplan_evacuation_mas
             planMessage.exitsInFieldOfViewPositions = ExitPositions.Values
                 .Where(exitPosition => InFieldOfView(exitPosition, position))
                 .ToList();
-            planMessage.agentsInFieldOfViewPositions = WorkerPositions.Values
-                .Where(agentPosition => InFieldOfView(agentPosition, position) && !agentPosition.Equals(position))
+            planMessage.agentsInFieldOfViewPositions = WorkerPositions
+                .Where(agentKvp => InFieldOfView(agentKvp.Value, position) && !agentKvp.Value.Equals(position))
+                .Select(agentKvp => new AgentSummary(agentKvp.Key, agentKvp.Value))
                 .ToList();
             return planMessage;
         }
