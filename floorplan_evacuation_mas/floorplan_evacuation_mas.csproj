@@ -54,6 +54,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AgentSummary.cs" />
     <Compile Include="FloorPlanEnvironment.cs" />
     <Compile Include="FloorPlanForm.cs">
       <SubType>Form</SubType>

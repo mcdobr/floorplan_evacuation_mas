@@ -14,5 +14,8 @@ namespace floorplan_evacuation_mas
         public const string Emergency = "emergency";
         public const string Block = "block";
         public const string Exit = "exit";
+        public const string PeerQuestion = "peerQuestion";
+        public const string PeerAffirmative = "peerAffirmative";
+        public const string PeerNegative = "peerNegative";
     }
 }

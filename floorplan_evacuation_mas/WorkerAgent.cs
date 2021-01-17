@@ -7,25 +7,36 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ActressMas;
 using static floorplan_evacuation_mas.MessageType;
+using Environment = ActressMas.Environment;
 
 namespace floorplan_evacuation_mas
 {
     class WorkerAgent : TurnBasedAgent
     {
+        private const int waitForAnswerTurns = 4;
+        private const int cooldownForTalking = 5;
+
         private int id;
         private Point position;
         private State state;
         private Direction direction;
+
+        private bool running;
+        private FloorPlanMessage lastReceivedMessageFromMonitor = null;
+        private int waitTurns;
+
+        private Dictionary<int, int> blockList = new Dictionary<int, int>();
+
 
         public WorkerAgent(int id, int x, int y)
         {
             this.id = id;
             this.position = new Point(x, y);
             this.state = State.MovingRandomly;
+            this.running = true;
         }
 
         public int Id => id;
-
 
         public override void Setup()
         {
@@ -39,79 +50,173 @@ namespace floorplan_evacuation_mas
 
         public override void Act(Queue<Message> messages)
         {
-            while (messages.Count > 0)
+            while (messages.Count > 0 && running)
             {
                 Message message = messages.Dequeue();
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
                 FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
-                this.position = receivedMessage.position;
-                switch (receivedMessage.type)
+                if (message.Sender == MonitorAgent.Monitor)
                 {
-                    case MessageType.Acknowledge:
-                    {
-                        Point candidate = null;
-                        if (state == State.MovingRandomly)
-                        {
-                            candidate = MoveRandomly();
-                        }
-                        else
-                        {
-                            if (receivedMessage.exitsInFieldOfViewPositions.Count == 0)
-                            {
-                                candidate = MoveInDirection();
-                            }
-                            else
-                            {
-                                candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
-                                    this.position));
-                            }
-                        }
+                    HandleMessageFromMonitor(receivedMessage);
+                }
+                else
+                {
+                    HandleMessageFromPeer(receivedMessage, message);
+                }
 
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        break;
-                    }
-                    case MessageType.Emergency:
-                    {
-                        state = State.MovingInConstantDirection;
-                        var candidate = MoveInDirection();
 
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        break;
-                    }
-                    case MessageType.Block:
-                    {
-                        // todo: could exclude blocked old dir
-                        Point candidate = null;
-                        if (state == State.MovingRandomly)
-                        {
-                            candidate = MoveRandomly();
-                        }
-                        else
-                        {
-                            candidate = MoveInOtherDirection();
-                        }
+                blockList = blockList.Select(kvp => new KeyValuePair<int, int>(kvp.Key, kvp.Value - 1))
+                    .Where(kvp => kvp.Value > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value
+                    );
 
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage();
-                        changePositionMessage.type = MessageType.Move;
-                        changePositionMessage.position = candidate;
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        break;
-                    }
-                    case Exit:
+                // if (state == State.WaitingForPeerResponses)
+                // {
+                //     --waitTurns;
+                //     if (wa)
+                // }
+            }
+        }
+
+        private void HandleMessageFromPeer(FloorPlanMessage receivedMessage, Message message)
+        {
+            switch (receivedMessage.type)
+            {
+                case MessageType.PeerQuestion:
+                {
+                    string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
+                        ? MessageType.PeerAffirmative
+                        : MessageType.PeerNegative;
+                    // string messageType = PeerNegative;
+                    FloorPlanMessage response =
+                        new FloorPlanMessage(messageType, lastReceivedMessageFromMonitor.position);
+                    Send(message.Sender, JsonSerializer.Serialize(response));
+                    break;
+                }
+                case MessageType.PeerAffirmative:
+                {
+                    // todo: following not working right, but deadlock cooldown
+                    // is implemented by not asking that agent again for a number of turns
+                    if (state == State.WaitingForPeerResponses)
                     {
-                        break;
+                        state = State.FollowingOther;
+                        var candidate = MoveNear(receivedMessage.position);
+                        FloorPlanMessage changePositionMessage =
+                            new FloorPlanMessage(MessageType.Move, candidate);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
                     }
-                    default:
-                        throw new NotImplementedException();
+
+                    break;
+                }
+                case MessageType.PeerNegative:
+                {
+                    blockList[Utils.ParsePeer(message.Sender)] = cooldownForTalking;
+                    break;
+                }
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        private void HandleMessageFromMonitor(FloorPlanMessage receivedMessage)
+        {
+            this.position = receivedMessage.position;
+            switch (receivedMessage.type)
+            {
+                case MessageType.Acknowledge:
+                {
+                    var candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case MessageType.Emergency:
+                {
+                    state = State.MovingInConstantDirection;
+                    var candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case MessageType.Block:
+                {
+                    Point candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case Exit:
+                {
+                    running = false;
+                    break;
+                }
+                default:
+                    throw new NotImplementedException();
+            }
+
+            lastReceivedMessageFromMonitor = receivedMessage;
+        }
+
+        private Point PickCandidate(FloorPlanMessage receivedMessageFromMonitor)
+        {
+            Point candidate = null;
+            if (state == State.MovingRandomly)
+            {
+                candidate = MoveRandomly();
+            }
+            else
+            {
+                if (receivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0)
+                {
+                    state = State.MovingTowardsExit;
+                    candidate = MoveNear(Utils.closestPoint(receivedMessageFromMonitor.exitsInFieldOfViewPositions,
+                        this.position));
+                }
+                else if (receivedMessageFromMonitor.agentsInFieldOfViewPositions.Count > 0)
+                {
+                    receivedMessageFromMonitor.agentsInFieldOfViewPositions.ForEach(peerAgent =>
+                    {
+                        var peerQuestionMessage = new FloorPlanMessage(MessageType.PeerQuestion, peerAgent.Position);
+                        if (!blockList.ContainsKey(peerAgent.Id) ||
+                            (blockList.ContainsKey(peerAgent.Id) && blockList[peerAgent.Id] <= 0))
+                        {
+                            Send("Worker " + peerAgent.Id, JsonSerializer.Serialize(peerQuestionMessage));
+                        }
+                    });
+
+                    // move in a direction until you get a response
+
+                    // todo: our strategy might not be the best because then we have to handle inconsistencies by getting blocked by the monitor,
+                    //  but otherwise we need other stateful solution to let time pass (we focused on turns which are linked to messages received, but if we do not
+                    //  send message to monitor, we don't progress)
+                    if (receivedMessageFromMonitor.type == MessageType.Block)
+                    {
+                        candidate = MoveInOtherDirection();
+                    }
+                    else
+                    {
+                        candidate = MoveInDirection();
+                    }
+
+                    state = State.WaitingForPeerResponses;
+                }
+                else
+                {
+                    if (receivedMessageFromMonitor.type == MessageType.Block)
+                    {
+                        candidate = MoveInOtherDirection();
+                    }
+                    else
+                    {
+                        candidate = MoveInDirection();
+                    }
                 }
             }
+
+            return candidate;
         }
 
         private Point MoveNear(Point exitPosition)
@@ -178,7 +283,6 @@ namespace floorplan_evacuation_mas
             }
         }
 
-        // todo: wtf does this do?
         private bool IsInBounds(Point position)
         {
             return this.position.X >= 0 && this.position.X < Utils.Size && this.position.Y >= 0 &&
@@ -241,7 +345,9 @@ namespace floorplan_evacuation_mas
         {
             MovingRandomly,
             MovingInConstantDirection,
-            MovingTowardsExit
+            MovingTowardsExit,
+            WaitingForPeerResponses,
+            FollowingOther
         };
 
         //todo: The labels are wrong because x is the column and y is the line (start from top left corner)

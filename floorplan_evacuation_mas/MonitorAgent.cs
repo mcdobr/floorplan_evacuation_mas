@@ -108,9 +108,24 @@ namespace floorplan_evacuation_mas
                 }
             }
 
+            // todo: block if server is congested
+            if (WorkerPositions.ContainsKey(senderId) && Utils.Distance(WorkerPositions[senderId], receivedMessage.position) > 1)
+            {
+                var blockMessage = BuildFloorPlanMessage(MessageType.Block, WorkerPositions[senderId]);
+                Send(sender, JsonSerializer.Serialize(blockMessage));
+                return;
+            }
+
             // Allow the requested move
-            WorkerPositions[senderId] = receivedMessage.position;
-            
+            if (!WorkerPositions.ContainsKey(senderId))
+            {
+                return;
+            }
+            else
+            {
+                WorkerPositions[senderId] = receivedMessage.position;
+            }
+
             // Should declare emergency
             if (++numberOfPositionChanges[senderId] == turnsUntilEmergency)
             {
@@ -152,8 +167,9 @@ namespace floorplan_evacuation_mas
             planMessage.exitsInFieldOfViewPositions = ExitPositions.Values
                 .Where(exitPosition => InFieldOfView(exitPosition, position))
                 .ToList();
-            planMessage.agentsInFieldOfViewPositions = WorkerPositions.Values
-                .Where(agentPosition => InFieldOfView(agentPosition, position) && !agentPosition.Equals(position))
+            planMessage.agentsInFieldOfViewPositions = WorkerPositions
+                .Where(agentKvp => InFieldOfView(agentKvp.Value, position) && !agentKvp.Value.Equals(position))
+                .Select(agentKvp => new AgentSummary(agentKvp.Key, agentKvp.Value))
                 .ToList();
             return planMessage;
         }
