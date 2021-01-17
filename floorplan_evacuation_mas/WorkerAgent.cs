@@ -50,23 +50,7 @@ namespace floorplan_evacuation_mas
                 {
                     case MessageType.Acknowledge:
                     {
-                        Point candidate = null;
-                        if (state == State.MovingRandomly)
-                        {
-                            candidate = MoveRandomly();
-                        }
-                        else
-                        {
-                            if (receivedMessage.exitsInFieldOfViewPositions.Count == 0)
-                            {
-                                candidate = MoveInDirection();
-                            }
-                            else
-                            {
-                                candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
-                                    this.position));
-                            }
-                        }
+                        var candidate = PickCandidate(receivedMessage);
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
                         changePositionMessage.type = MessageType.Move;
@@ -77,7 +61,7 @@ namespace floorplan_evacuation_mas
                     case MessageType.Emergency:
                     {
                         state = State.MovingInConstantDirection;
-                        var candidate = MoveInDirection();
+                        var candidate = PickCandidate(receivedMessage);
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
                         changePositionMessage.type = MessageType.Move;
@@ -87,16 +71,8 @@ namespace floorplan_evacuation_mas
                     }
                     case MessageType.Block:
                     {
-                        // todo: could exclude blocked old dir
-                        Point candidate = null;
-                        if (state == State.MovingRandomly)
-                        {
-                            candidate = MoveRandomly();
-                        }
-                        else
-                        {
-                            candidate = MoveInOtherDirection();
-                        }
+                        Point candidate = PickCandidate(receivedMessage);
+                        
 
                         FloorPlanMessage changePositionMessage = new FloorPlanMessage();
                         changePositionMessage.type = MessageType.Move;
@@ -112,6 +88,35 @@ namespace floorplan_evacuation_mas
                         throw new NotImplementedException();
                 }
             }
+        }
+
+        private Point PickCandidate(FloorPlanMessage receivedMessage)
+        {
+            Point candidate = null;
+            if (state == State.MovingRandomly)
+            {
+                candidate = MoveRandomly();
+            }
+            else
+            {
+                if (receivedMessage.exitsInFieldOfViewPositions.Count > 0)
+                {
+                    candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                        this.position));
+                }
+                else
+                {
+                    if (receivedMessage.type == Block)
+                    {
+                        candidate = MoveInOtherDirection();
+                    }
+                    else
+                    {
+                        candidate = MoveInDirection();
+                    }
+                }
+            }
+            return candidate;
         }
 
         private Point MoveNear(Point exitPosition)
