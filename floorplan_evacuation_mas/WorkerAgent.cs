@@ -54,74 +54,13 @@ namespace floorplan_evacuation_mas
                 Console.WriteLine("\t[{1} -> {0}]: {2}", this.Name, message.Sender, message.Content);
 
                 FloorPlanMessage receivedMessage = JsonSerializer.Deserialize<FloorPlanMessage>(message.Content);
-                switch (receivedMessage.type)
+                if (message.Sender == MonitorAgent.Monitor)
                 {
-                    case MessageType.Acknowledge:
-                    {
-                        this.position = receivedMessage.position;
-                        var candidate = PickCandidate(receivedMessage);
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        lastReceivedMessageFromMonitor = receivedMessage;
-                        break;
-                    }
-                    case MessageType.Emergency:
-                    {
-                        this.position = receivedMessage.position;
-                        state = State.MovingInConstantDirection;
-                        var candidate = PickCandidate(receivedMessage);
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-
-                        lastReceivedMessageFromMonitor = receivedMessage;
-                        break;
-                    }
-                    case MessageType.Block:
-                    {
-                        this.position = receivedMessage.position;
-                        Point candidate = PickCandidate(receivedMessage);
-                        FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
-                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-
-                        lastReceivedMessageFromMonitor = receivedMessage;
-                        break;
-                    }
-                    case Exit:
-                    {
-                        this.position = receivedMessage.position;
-                        break;
-                    }
-                    case MessageType.PeerQuestion:
-                    {
-                        // string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
-                        // ? MessageType.PeerAffirmative
-                        // : MessageType.PeerNegative;
-                        string messageType = PeerNegative;
-                        FloorPlanMessage response =
-                            new FloorPlanMessage(messageType, lastReceivedMessageFromMonitor.position);
-                        Send(message.Sender, JsonSerializer.Serialize(response));
-                        break;
-                    }
-                    case MessageType.PeerAffirmative:
-                    {
-                        if (state == State.WaitingForPeerResponses)
-                        {
-                            state = State.FollowingOther;
-                            var candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
-                                this.position));
-                            FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
-                            Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
-                        }
-
-                        break;
-                    }
-                    case MessageType.PeerNegative:
-                    {
-                        blockList[Utils.ParsePeer(message.Sender)] = cooldownForTalking;
-                        break;
-                    }
-                    default:
-                        throw new NotImplementedException();
+                    HandleMessageFromMonitor(receivedMessage);
+                }
+                else
+                {
+                    HandleMessageFromPeer(receivedMessage, message);
                 }
 
 
@@ -138,6 +77,82 @@ namespace floorplan_evacuation_mas
                 //     if (wa)
                 // }
             }
+        }
+
+        private void HandleMessageFromPeer(FloorPlanMessage receivedMessage, Message message)
+        {
+            switch (receivedMessage.type)
+            {
+                case MessageType.PeerQuestion:
+                {
+                    // string messageType = lastReceivedMessageFromMonitor.exitsInFieldOfViewPositions.Count > 0
+                    // ? MessageType.PeerAffirmative
+                    // : MessageType.PeerNegative;
+                    string messageType = PeerNegative;
+                    FloorPlanMessage response =
+                        new FloorPlanMessage(messageType, lastReceivedMessageFromMonitor.position);
+                    Send(message.Sender, JsonSerializer.Serialize(response));
+                    break;
+                }
+                case MessageType.PeerAffirmative:
+                {
+                    if (state == State.WaitingForPeerResponses)
+                    {
+                        state = State.FollowingOther;
+                        var candidate = MoveNear(Utils.closestPoint(receivedMessage.exitsInFieldOfViewPositions,
+                            this.position));
+                        FloorPlanMessage changePositionMessage =
+                            new FloorPlanMessage(MessageType.Move, candidate);
+                        Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    }
+
+                    break;
+                }
+                case MessageType.PeerNegative:
+                {
+                    blockList[Utils.ParsePeer(message.Sender)] = cooldownForTalking;
+                    break;
+                }
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        private void HandleMessageFromMonitor(FloorPlanMessage receivedMessage)
+        {
+            this.position = receivedMessage.position;
+            switch (receivedMessage.type)
+            {
+                case MessageType.Acknowledge:
+                {
+                    var candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case MessageType.Emergency:
+                {
+                    state = State.MovingInConstantDirection;
+                    var candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case MessageType.Block:
+                {
+                    Point candidate = PickCandidate(receivedMessage);
+                    FloorPlanMessage changePositionMessage = new FloorPlanMessage(MessageType.Move, candidate);
+                    Send(MonitorAgent.Monitor, JsonSerializer.Serialize(changePositionMessage));
+                    break;
+                }
+                case Exit:
+                {
+                    break;
+                }
+                default:
+                    throw new NotImplementedException();
+            }
+            lastReceivedMessageFromMonitor = receivedMessage;
         }
 
         private Point PickCandidate(FloorPlanMessage receivedMessageFromMonitor)
